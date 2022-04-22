@@ -342,6 +342,7 @@ private:
 template<typename T>
 class List
 {
+public:
 	using value_type = T;
 	//using difference_type = std::vector<value_type, ButiContainerDetail::ContainerAllocator<value_type>>::difference_type;
 	using const_value_type = const value_type;
@@ -358,7 +359,6 @@ class List
 	using reverse_iterator_type = Iterator<value_type>;
 	using const_reverse_iterator_type = const Iterator<value_type>;
 
-public:
 
 	inline constexpr List()noexcept {}
 	inline List(const List& arg_other) :List(arg_other.begin(), arg_other.end()) {}
@@ -393,8 +393,6 @@ public:
 		dealloc();
 	}
 
-public:
-
 	inline bool IsEmpty() const noexcept
 	{
 		return !currentDataSize;
@@ -408,6 +406,9 @@ public:
 	std::int32_t GetCapacity()const noexcept
 	{
 		return currentCapacity;
+	}
+	inline void push_back(const_reference_type arg_item) {
+		Add(arg_item);
 	}
 
 	void Add(const_reference_type arg_item)
@@ -823,8 +824,9 @@ public:
 	const_iterator_type cbegin() { return iterator_type(reinterpret_cast<pointer_type>(p_data)); }
 	const_iterator_type cend() const { return iterator_type(reinterpret_cast<pointer_type>(p_data) + currentDataSize); }
 	iterator_type erase(iterator_type arg_pos) {
-		for (auto endItr = end() - 1; arg_pos != endItr; arg_pos++) {
-			assign(arg_pos.Ptr(), *(arg_pos + 1));
+		auto currentPos = arg_pos;
+		for (auto endItr = end() - 1; currentPos != endItr; currentPos++) {
+			assign(currentPos.Ptr(), *(currentPos + 1));
 		}
 		currentDataSize--;
 		if constexpr (!std::is_trivially_destructible_v<T>) {

@@ -407,9 +407,14 @@ public:
 		refferenceCounter = arg_other.refferenceCounter;
 	}
 	template<typename S>
-	this_type& operator=(const Value_ptr<S>& arg_other) noexcept{
+	this_type& operator=(const Value_ptr<S>& arg_other) noexcept {
 		p_value = arg_other.p_value;
 		refferenceCounter = arg_other.refferenceCounter;
+		return *this;
+	}
+	this_type& operator=(std::nullptr_t) noexcept {
+		p_value =nullptr;
+		refferenceCounter = refCounter_type();
 		return *this;
 	}
 	[[nodiscard]] Value_ptr<T> lock() const noexcept{
@@ -548,10 +553,10 @@ public:
 
 	inline operator bool()const { return !!p_value; }
 	inline bool operator==(std::nullptr_t)const {
-		return !!p_value;
+		return !p_value;
 	}
 	inline bool operator!=(std::nullptr_t)const {
-		return !p_value;
+		return p_value;
 	}
 	inline operator std::int32_t() const = delete;
 	inline bool operator!()const { return !p_value; }
