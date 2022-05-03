@@ -395,6 +395,7 @@ class Value_weak_ptr {
 	using const_pointer = const T*;
 
 	template<typename S, typename R> friend class Value_ptr;
+	template<typename S, typename R> friend class Value_weak_ptr;
 
 public:
 	Value_weak_ptr()noexcept :p_value(nullptr){}
@@ -408,7 +409,23 @@ public:
 	}
 	template<typename S>
 	this_type& operator=(const Value_ptr<S>& arg_other) noexcept {
-		p_value = arg_other.p_value;
+		if constexpr (std::is_void_v<S>) {
+			p_value = reinterpret_cast<T*>(arg_other.p_value);
+		}
+		else {
+			p_value = arg_other.p_value;
+		}
+		refferenceCounter = arg_other.refferenceCounter;
+		return *this;
+	}
+	template<typename S>
+	this_type& operator=(const Value_weak_ptr<S>& arg_other) noexcept {
+		if constexpr (std::is_void_v<S>) {
+			p_value = reinterpret_cast<T*>(arg_other.p_value);
+		}
+		else {
+			p_value = arg_other.p_value;
+		}
 		refferenceCounter = arg_other.refferenceCounter;
 		return *this;
 	}
@@ -416,6 +433,15 @@ public:
 		p_value =nullptr;
 		refferenceCounter = refCounter_type();
 		return *this;
+	}
+	bool operator==(const this_type& arg_other)const noexcept {
+		return p_value == arg_other.p_value;
+	}
+	operator Value_weak_ptr<void> ()const {
+		auto output = Value_weak_ptr<void>();
+		output.p_value=p_value;
+		output.refferenceCounter = refferenceCounter;
+		return output;
 	}
 	[[nodiscard]] Value_ptr<T> lock() const noexcept{
 		if (p_value) {
