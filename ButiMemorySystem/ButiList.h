@@ -123,6 +123,7 @@ public:
 	using reference = const value_type&;
 	//
 	Iterator(pointer_type arg_ptr)noexcept :p_v(arg_ptr) {}
+	Iterator(nullptr_t)noexcept :p_v(nullptr) {}
 	Iterator(void_pointer_type arg_ptr)noexcept :p_v(reinterpret_cast<pointer_type>(arg_ptr)) {}
 	Iterator(const this_type& arg_other) noexcept :p_v(arg_other.p_v) {}
 	Iterator(this_type&& arg_other)noexcept :p_v(arg_other.p_v) {
