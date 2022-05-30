@@ -775,6 +775,7 @@ public:
 	}
 
 	List& operator=(const List& arg_other) {
+		Clear();
 		dealloc();
 		currentCapacity = 0;
 		currentDataSize = 0;
