@@ -7,7 +7,21 @@
 namespace ButiEngine {
 
 template <typename T, typename U>inline constexpr T max_(T a, U b) { return  ((a) > (b)) ? (a) : (b); }
+struct has_eq_operator_impl {
+	template <typename T>	static auto check(T&& x)->decltype(x == x, std::true_type{});
 
+	template <typename T>	static auto check(...)->std::false_type;
+}; 
+struct has_neq_operator_impl {
+	template <typename T>	static auto check(T&& x)->decltype(x != x, std::true_type{});
+
+	template <typename T>	static auto check(...)->std::false_type;
+};
+template <typename T>class has_eq_operator : public decltype(has_eq_operator_impl::check<T>(std::declval<T>())) {};
+template <typename T>class has_neq_operator : public decltype(has_neq_operator_impl::check<T>(std::declval<T>())) {};
+
+template <typename T>constexpr bool has_eq_operator_v = has_eq_operator<T>();
+template <typename T>constexpr bool has_neq_operator_v = has_neq_operator<T>();
 
 namespace ButiContainerDetail {
 
@@ -393,7 +407,20 @@ public:
 		}
 		dealloc();
 	}
-
+	inline bool operator==(const List<T>& arg_other)const noexcept {
+		if constexpr (has_neq_operator_v<T>) {
+			if (this->currentDataSize != arg_other.currentDataSize) {
+				return false;
+			}
+			for (std::uint32_t index=0; index < this->currentDataSize; index++) {
+				if ((reinterpret_cast<const T*>(this->p_data))[index] != (reinterpret_cast<const T*>(arg_other.p_data))[index]) {
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
+	}
 	inline bool IsEmpty() const noexcept
 	{
 		return !currentDataSize;
@@ -425,6 +452,16 @@ public:
 		Reserve(currentDataSize + arg_items.GetSize());
 		for (auto itr = arg_items.begin(), endItr = arg_items.end(); itr < endItr; itr++, currentDataSize++) {
 			copy_construct(&reinterpret_cast<pointer_type>(p_data)[currentDataSize], *itr);
+		}
+	}
+
+	void Add_noDuplicate(const this_type& arg_items)
+	{
+		Reserve(currentDataSize + arg_items.GetSize());
+		for (auto itr = arg_items.begin(), endItr = arg_items.end(); itr < endItr; itr++) {
+			if (Contains(*itr)) { continue; }
+			copy_construct(&reinterpret_cast<pointer_type>(p_data)[currentDataSize], *itr);
+			currentDataSize++;
 		}
 	}
 	/// <summary>
@@ -484,8 +521,8 @@ public:
 			currentDataSize += 1;
 			return;
 		}
-		for (iterator_type itr = arg_pos + 1, endItr = end() + 1; itr < endItr; itr++) {
-			assign(itr.Ptr(), *(itr - 1));
+		for (iterator_type itr = end() , endItr =arg_pos ; itr > endItr; itr--) {
+			copy_construct(itr.Ptr(), *(itr - 1));
 		}
 		*arg_pos = arg_item;
 		currentDataSize += 1;
@@ -716,7 +753,7 @@ public:
 	}
 
 	template<typename F>
-	value_type* Find(F arg_function) const
+	iterator_type Find(F arg_function) const
 	{
 		auto itr = std::find_if(begin(), end(), arg_function);
 		return itr != end() ? itr : nullptr;
@@ -848,7 +885,9 @@ public:
 		}
 		return arg_begin;
 	}
-
+	inline const T* data()const {
+		return p_data;
+	}
 
 private:
 
@@ -863,7 +902,7 @@ private:
 	}
 	inline void dealloc() {
 		if (p_data) {
-			ButiContainerDetail::ContainerAllocator<value_type>::deallocate(p_data, currentCapacity);
+			ButiContainerDetail::ContainerAllocator<value_type>::deallocate(reinterpret_cast<void*>(p_data), currentCapacity);
 			p_data = nullptr;
 		}
 	}
@@ -891,7 +930,7 @@ private:
 		}
 	}
 
-	void* p_data = nullptr;
+	T* p_data = nullptr;
 	std::uint32_t currentDataSize = 0;
 	std::uint32_t currentCapacity = 0;
 

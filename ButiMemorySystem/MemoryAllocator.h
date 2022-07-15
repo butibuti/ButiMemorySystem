@@ -28,6 +28,11 @@ public:
 		arg_ptr->~T();
 		deallocate(reinterpret_cast<void*>(arg_ptr));
 	}
+	template<typename T>
+	static inline constexpr void deallocate(const T* arg_ptr) {
+		arg_ptr->~T();
+		deallocate(const_cast<void*>(reinterpret_cast<const void*>(arg_ptr)));
+	}
 private:
 
 };
