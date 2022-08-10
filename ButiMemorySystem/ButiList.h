@@ -1,7 +1,7 @@
 #ifndef BUTILIST_H
 #define BUTILIST_H
-#include"ButiUtil/ButiUtil/TypeDetail.h"
-#include"ButiUtil/ButiUtil/Exception.h"
+#include"../../ButiUtil/ButiUtil/TypeDetail.h"
+#include"../../ButiUtil/ButiUtil/Exception.h"
 #include<cassert>
 #include"MemoryAllocator.h"
 namespace ButiEngine {

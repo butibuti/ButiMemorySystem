@@ -1,6 +1,6 @@
 #pragma once
-#ifndef MEMORYALLOCATOR_H
-
+#ifndef BUTI_MEMORYALLOCATOR_H
+#define BUTI_MEMORYALLOCATOR_H
 #include <cstdint>
 #ifdef BUTIMEMORYSYSTEM_EXPORTS
 #define BUTIMEMORYSYSTEM_API __declspec(dllexport)
@@ -37,4 +37,4 @@ private:
 
 };
 }
-#endif // !MEMORYALLOCATOR_H
+#endif // !BUTI_MEMORYALLOCATOR_H
