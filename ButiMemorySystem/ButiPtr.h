@@ -101,30 +101,40 @@ public:
 
 	inline constexpr Value_ptr()noexcept :p_value(nullptr), refferenceCounter() {}
 	inline constexpr Value_ptr(std::nullptr_t)noexcept :p_value(nullptr), refferenceCounter() {}
-	inline Value_ptr(const this_type& arg_s) : p_value(arg_s.p_value), refferenceCounter(arg_s.refferenceCounter) {}
+	inline Value_ptr(const this_type& arg_s) : p_value(arg_s.p_value), refferenceCounter(arg_s.refferenceCounter) {
+		GarbageCollection::GarbageCollector::GetInstance()->RegistChild(this, refferenceCounter.GetImpl());
+	}
 	template<typename S, std::enable_if_t<std::is_convertible_v<S*, pointer>, std::int32_t> = 0>
-	inline Value_ptr(const Value_ptr<S, refCounter_type>& arg_s) : p_value(arg_s.p_value), refferenceCounter(arg_s.refferenceCounter) {}
+	inline Value_ptr(const Value_ptr<S, refCounter_type>& arg_s) : p_value(arg_s.p_value), refferenceCounter(arg_s.refferenceCounter) {
+		GarbageCollection::GarbageCollector::GetInstance()->RegistChild(this, refferenceCounter.GetImpl());
+	}
 	template<typename S>
 	inline explicit Value_ptr(const S& arg_v) :Value_ptr(refCounter_type::Alloc::allocate(arg_v)){	}
 	template <class U>
 	Value_ptr(const Value_ptr<U>& arg_other, element_type* arg_p) noexcept {
 		refferenceCounter = arg_other.refferenceCounter;
 		p_value = arg_p;
+		GarbageCollection::GarbageCollector::GetInstance()->RegistChild(this, refferenceCounter.GetImpl());
 	}
 	inline Value_ptr(T* arg_p, RefferenceObject arg_refObj) :p_value(arg_p), refferenceCounter(arg_refObj) {}
 	template<typename S>
 	inline explicit Value_ptr(S* arg_p) :p_value(arg_p), refferenceCounter(arg_p, SmartPtrDetail::TypeStorage::TypeStorageSpecifier()) {
 		_SetWeakPtrEnableValue(arg_p);
+		GarbageCollection::GarbageCollector::GetInstance()->AddObject(this, refferenceCounter.GetImpl());
 	}
 	template<typename S>
-	inline explicit Value_ptr(S* arg_p, [[maybe_unused]] const SmartPtrDetail::MemberPtrNotify) :p_value(arg_p), refferenceCounter(arg_p, SmartPtrDetail::TypeStorage::MemberTypeStorageSpecifier()) {}
+	inline explicit Value_ptr(S* arg_p, [[maybe_unused]] const SmartPtrDetail::MemberPtrNotify) :p_value(arg_p), refferenceCounter(arg_p, SmartPtrDetail::TypeStorage::MemberTypeStorageSpecifier()) {
+		GarbageCollection::GarbageCollector::GetInstance()->AddObject(this, refferenceCounter.GetImpl());
+	}
 	template<typename S, typename D>
 	inline explicit Value_ptr(S* arg_p, D arg_d) :p_value(arg_p), refferenceCounter(arg_p, arg_d) {
 		_SetWeakPtrEnableValue(arg_p);
+		GarbageCollection::GarbageCollector::GetInstance()->AddObject(this, refferenceCounter.GetImpl());
 	}
 	template<typename S>
 	inline constexpr Value_ptr(const Value_weak_ptr<S> arg_vwp_other)noexcept {
 		ConstructFromWeak(arg_vwp_other);
+		GarbageCollection::GarbageCollector::GetInstance()->RegistChild(this, refferenceCounter.GetImpl());
 	}
 
 	~Value_ptr() {}
@@ -140,17 +150,21 @@ public:
 	inline void swap(this_type& arg_other) {
 		std::swap(p_value, arg_other.p_value);
 		refferenceCounter.swap(arg_other.refferenceCounter);
+		GarbageCollection::GarbageCollector::GetInstance()->RegistChild(&arg_other,arg_other.refferenceCounter.GetImpl());
+		GarbageCollection::GarbageCollector::GetInstance()->RegistChild(this, refferenceCounter.GetImpl());
 	}
 
 	inline this_type& operator=(const this_type& arg_s) {
 		p_value = arg_s.p_value;
 		refferenceCounter = arg_s.refferenceCounter;
+		GarbageCollection::GarbageCollector::GetInstance()->RegistChild(this, refferenceCounter.GetImpl());
 		return *this;
 	}
 	template<class S>
 	inline this_type& operator=(const Value_ptr<S, refCounter_type>& arg_s) {
 		p_value = arg_s.p_value;
 		refferenceCounter = arg_s.refferenceCounter;
+		GarbageCollection::GarbageCollector::GetInstance()->RegistChild(this, refferenceCounter.GetImpl());
 		return *this;
 	}
 	template<class S>
@@ -385,7 +399,6 @@ template<typename T> T* get_pointer(const ButiEngine::Value_ptr<T>& arg_vlp)
 }
 
 }
-
 
 //map‚Ö‚Ì‘Î‰ž
 namespace std {

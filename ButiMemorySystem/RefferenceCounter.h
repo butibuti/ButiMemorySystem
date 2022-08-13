@@ -4,6 +4,7 @@
 #include<type_traits>
 #include <cassert>
 #include"MemoryAllocator.h"
+#include"GarbageCollection.h"
 namespace ButiEngine {
 namespace SmartPtrDetail {
 namespace RefferenceCounter {
@@ -128,6 +129,7 @@ public:
 	virtual void Write(const void* arg_src) = 0;
 	virtual bool ShowGUI(const std::string& arg_label) = 0;
 	virtual inline void GetRestoreObject(Value_ptr<IValuePtrRestoreObject>& arg_ref_vlp) const = 0;
+	virtual std::uint64_t GetSize()const = 0;
 protected:
 	template<typename T>
 	inline bool ShowGUI_(const std::string& arg_label, T& arg_value) {
@@ -195,6 +197,7 @@ public:
 		return ShowGUI_(arg_label, *p_value);
 	}
 	inline void GetRestoreObject(Value_ptr<IValuePtrRestoreObject>& arg_ref_vlp)const override;
+	inline std::uint64_t GetSize()const { return sizeof(T); }
 private:
 	template<typename T, typename Allocator> friend class MemberTypeStorage;
 	this_type& operator=(const this_type&) { return *this; }
@@ -259,6 +262,20 @@ public:
 }
 
 namespace RefferenceCounter {
+enum ObjectColor :std::uint8_t{
+	White=0b00,Black=0b11,Gray=0b10,Purple=0b01
+};
+class IRCImpl {
+public:
+	virtual std::uint64_t inc() = 0;
+	virtual std::uint64_t dec() = 0;
+	virtual std::uint64_t count()const = 0;
+	virtual std::uint64_t GetSize()const = 0;
+	virtual const void* GetPtr()const = 0;
+	virtual ObjectColor GetColor()const = 0;
+	virtual void SetColor(const ObjectColor arg_color)= 0;
+};
+
 template<typename Allocator>
 class RefferenceCounter {
 	struct impl;
@@ -277,16 +294,17 @@ public:
 	~RefferenceCounter() { release(); }
 	inline void release() {
 		if (p_impl && !p_impl->dec()) {
-			p_impl->p_typeStorage->Dispose();
+			GarbageCollection::GarbageCollector::GetInstance()->RemoveObject(p_impl);
+			p_impl->m_p_typeStorage->Dispose();
 			Allocator::deallocate(p_impl);
 		}
 	}
 	inline void Write(const void* arg_src) {
-		p_impl->p_typeStorage->Write(arg_src);
+		p_impl->m_p_typeStorage->Write(arg_src);
 	}
 	inline void swap(this_type& r) { std::swap(p_impl, r.p_impl); }
-	inline TypeStorage::ITypeStorage* GetTypeStorage() { return p_impl->p_typeStorage; }
-	inline const TypeStorage::ITypeStorage* GetTypeStorage()const { return p_impl->p_typeStorage; }
+	inline TypeStorage::ITypeStorage* GetTypeStorage() { return p_impl->m_p_typeStorage; }
+	inline const TypeStorage::ITypeStorage* GetTypeStorage()const { return p_impl->m_p_typeStorage; }
 	inline bool unique()const { return use_count() == 1; }
 	inline std::uint64_t use_count()const { return p_impl ? p_impl->count() : 0; }
 	inline this_type& operator=(const this_type& arg_r) {
@@ -302,13 +320,17 @@ public:
 		return this_type(p_impl->CreateSameTypeStorage(arg_p_src));
 	}
 	inline bool ShowGUI(const std::string& arg_label) {
-		return p_impl->p_typeStorage->ShowGUI(arg_label);
+		return p_impl->m_p_typeStorage->ShowGUI(arg_label);
 	}
 	inline void _Increase() {
 		p_impl->inc();
 	}
 	inline void _Decrease() {
 		p_impl->dec();
+		if (p_impl->GetColor() != ObjectColor::Purple) {
+			GarbageCollection::GarbageCollector::GetInstance()->PushPurpleObject(p_impl);
+			p_impl->SetColor(ObjectColor::Purple);
+		}
 	}
 	inline bool _Increase_notZero() {
 		return p_impl->inc_nz();
@@ -317,34 +339,39 @@ public:
 		return p_impl->dec_nz();
 	}
 	inline void GetRestoreObject(Value_ptr<IValuePtrRestoreObject>& arg_ref_vlp) const;
+	inline IRCImpl* GetImpl()const { return p_impl; }
 private:
-	struct impl {
+	struct impl :public IRCImpl {
 		template<typename S, typename D> explicit impl(S* arg_p, D)
-			:use(1), p_typeStorage(D::template type<S>::name::get(arg_p)) {}
+			:m_use(1), m_p_typeStorage(D::template type<S>::name::get(arg_p)) {}
 		template<typename S, typename D> explicit impl(S* arg_p, D* arg_p_typeStorage)
-			:use(1), p_typeStorage(arg_p_typeStorage) {}
-		impl(TypeStorage::ITypeStorage* arg_p_typeStorage) :use(1), p_typeStorage(arg_p_typeStorage) {}
-		impl(const impl& arg_c) :use(arg_c.use), p_typeStorage(arg_c.p_typeStorage) {}
+			:m_use(1), m_p_typeStorage(arg_p_typeStorage) {}
+		impl(TypeStorage::ITypeStorage* arg_p_typeStorage) :m_use(1), m_p_typeStorage(arg_p_typeStorage) {}
+		impl(const impl& arg_c) :m_use(arg_c.m_use), m_p_typeStorage(arg_c.m_p_typeStorage) {}
 		inline std::uint64_t inc() {
-			return	_InterlockedIncrement64(reinterpret_cast<volatile std::int64_t*>(&use));
+			return	_InterlockedIncrement64(reinterpret_cast<volatile std::int64_t*>(&m_use));
 		}
 		inline std::uint64_t dec() {
-			return	_InterlockedDecrement64(reinterpret_cast<volatile std::int64_t*>(&use));
+			return	_InterlockedDecrement64(reinterpret_cast<volatile std::int64_t*>(&m_use));
 		}
 		inline std::uint64_t inc_nz() {
-			return	use ? inc() : false;
+			return	m_use ? inc() : false;
 		}
 		inline std::uint64_t dec_nz() {
-			return	use ? dec() : false;
+			return	m_use ? dec() : false;
 		}
-
-		inline std::uint64_t count()const { return use; }
-		~impl() { p_typeStorage->Destroy(); }
+		inline std::uint64_t GetSize()const { return m_p_typeStorage->GetSize(); }
+		inline const void* GetPtr()const { return m_p_typeStorage->ptr(); }
+		inline std::uint64_t count()const { return m_use; }
+		inline ObjectColor GetColor()const override { return m_color; }
+		inline void SetColor(const ObjectColor arg_color) { m_color = arg_color; }
+		~impl() { m_p_typeStorage->Destroy(); }
 		impl* CreateSameTypeStorage(void* arg_p_src)const {
-			return Allocator::template allocate< impl>(p_typeStorage->CreateSameTypeStorage(arg_p_src));
+			return Allocator::template allocate< impl>(m_p_typeStorage->CreateSameTypeStorage(arg_p_src));
 		}
-		std::uint64_t use;
-		TypeStorage::ITypeStorage* p_typeStorage;
+		std::uint64_t m_use;
+		ObjectColor m_color=ObjectColor::White;
+		TypeStorage::ITypeStorage* m_p_typeStorage;
 	};
 	impl* p_impl;
 };
@@ -369,6 +396,7 @@ public:
 		return p_impl->dec_nz();
 	}
 	inline std::uint64_t count()const { return p_impl->count(); }
+	inline IRCImpl* GetImpl()const { return p_impl; }
 private:
 	RefferenceCounter<Allocator>::template impl* p_impl;
 };
