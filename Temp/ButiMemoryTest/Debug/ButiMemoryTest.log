@@ -1,0 +1,3 @@
+﻿  ButiMemoryTest.cpp
+D:\K019G1120\Projects\ButiEngine\Libs\Library\ButiMemorySystem\ButiMemorySystem\MemoryAllocator.h(38,2): warning C4091: 'extern ': 変数が何も宣言されていないときは、'ButiMemorySystem::Allocator' の左辺を無視します。
+  ButiMemoryTest.vcxproj -> D:\K019G1120\Projects\ButiEngine\Libs\Library\ButiMemorySystem\output\Debug\ButiMemoryTest.exe

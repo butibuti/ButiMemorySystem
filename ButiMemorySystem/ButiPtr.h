@@ -313,7 +313,7 @@ public:
 		return this_type(p_impl->CreateSameTypeStorage(arg_p_src));
 	}
 	inline bool ShowGUI(const std::string& arg_label) {
-		return p_impl->p_typeStorage->ShowGUI(arg_label);
+		return p_impl?p_impl->p_typeStorage->ShowGUI(arg_label):false;
 	}
 	inline void _Increase() {
 		p_impl->inc();
