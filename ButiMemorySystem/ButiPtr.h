@@ -16,6 +16,8 @@ inline std::string to_string(const ButiScript::Type_hasMember<T>& arg_v);
 
 namespace ButiEngine {
 
+class IEnable_value_from_this;
+
 template <class T, class = void>
 struct _Can_enable_value: std::false_type {}; // detect unambiguous and accessible inheritance from enable_shared_from_this
 
@@ -125,7 +127,6 @@ class MemberTypeStorage;
 class ITypeStorage {
 public:
 	virtual void Destroy() = 0;
-	virtual void Dispose() = 0;
 	virtual ITypeStorage* Clone() const= 0;
 	virtual ITypeStorage* CreateSameTypeStorage(void * arg_src)const = 0;
 	virtual std::string ToString() const= 0;
@@ -181,8 +182,10 @@ class TypeStorage : public ITypeStorage {
 public:
 	using this_type = TypeStorage<T,Allocator>;
 	TypeStorage(T* arg_p) :p_value(arg_p) {}
-	inline void Dispose()override { Allocator::deallocate( p_value); }
-	inline void Destroy()override { Allocator::deallocate(this); }
+	inline void Destroy()override {
+		Allocator::deallocate(p_value);
+		Allocator::deallocate(this);
+	}
 
 	inline ITypeStorage* Clone()const override {
 		return Allocator::template allocate<this_type>(CloneValue<T,Allocator>(p_value));
@@ -213,14 +216,13 @@ private:
 	TypeStorage(const this_type& arg_rhs) : p_value(arg_rhs.p_value) {}
 	TypeStorage() = delete;
 	T* p_value;
-}; 
+};
 template <typename T,typename Allocator>
 class MemberTypeStorage : public ITypeStorage {
 	friend typename Allocator;
 public:
 	using this_type = MemberTypeStorage<T,Allocator>;
-	inline void Dispose()override {  }
-	inline void Destroy()override { Allocator::deallocate(this); }
+	inline void Destroy()override {	Allocator::deallocate(this);}
 	//値のクローン作成(今後メモリ確保は変更)
 	inline ITypeStorage* Clone()const override {
 		return Allocator::template allocate<TypeStorage<T>>(CloneValue<T,Allocator>(p_value));
@@ -272,120 +274,80 @@ public:
 namespace RefferenceCounter {
 template<typename Allocator>
 class RefferenceCounter {
-	struct impl;
-	friend class RefferenceCounter_weak<Allocator>;
-	using this_type = RefferenceCounter<Allocator>;
+	using this_type = RefferenceCounter<ButiMemorySystem::Allocator>;
 public:
 	using Alloc = Allocator;
-	constexpr RefferenceCounter()noexcept :p_impl(nullptr) {}
-	constexpr RefferenceCounter(impl* arg_p_impl) :p_impl(arg_p_impl) {}
-	RefferenceCounter(this_type* arg_r) : p_impl(arg_r->p_impl) {}
-	RefferenceCounter(const this_type& arg_r) :p_impl(arg_r.p_impl) { if (p_impl) p_impl->inc(); }
+	constexpr RefferenceCounter()noexcept :p_typeStorage(nullptr),use(0),weak(0) {}
+	constexpr RefferenceCounter(TypeStorage::ITypeStorage* arg_p_typeStorage) :p_typeStorage(arg_p_typeStorage), use(0), weak(0) {}
+	RefferenceCounter(this_type* arg_r) : p_typeStorage(arg_r->p_typeStorage) {}	
+
+
 	template<typename S, typename D>
-	explicit RefferenceCounter(S* arg_p, D arg_d) :p_impl(Allocator::template allocate<impl>(arg_p, arg_d)) {}
+	explicit RefferenceCounter(S* arg_p, D arg_d):use(1), weak(0), p_typeStorage(D::template type<S>::name::get(arg_p)) {}
 	template<typename S, typename D>
-	explicit RefferenceCounter(S* arg_p, D* arg_p_d) :p_impl(Allocator::template allocate<impl>(arg_p, arg_p_d)) {}
-	~RefferenceCounter() { release(); }
-	inline void release() {
-		if (p_impl && !p_impl->dec()) {
-			p_impl->p_typeStorage->Dispose();
-			Allocator::deallocate( p_impl);
+	explicit RefferenceCounter(S* arg_p, D* arg_p_d):use(1), weak(0), p_typeStorage(arg_p_d) {}
+	~RefferenceCounter() {  }
+	inline bool release() {
+		if (p_typeStorage && !_Decrease_notZero()) {
+			p_typeStorage->Destroy();
+			p_typeStorage = nullptr;
+			if (!weak) {
+				Alloc::deallocate(this);
+			}
+			return true;
+		}
+		return false;
+	}
+	inline void release_weak() {
+		if (!_Decrease_weak()&&!use) {
+			Alloc::deallocate(this);
 		}
 	}
 	inline void Write(const void* arg_src) {
-		p_impl->p_typeStorage->Write(arg_src);
+		p_typeStorage->Write(arg_src);
 	}
-	inline void swap(this_type& r) { std::swap(p_impl, r.p_impl); }
-	inline TypeStorage::ITypeStorage* GetTypeStorage() { return p_impl->p_typeStorage; }
-	inline const TypeStorage::ITypeStorage* GetTypeStorage()const { return p_impl->p_typeStorage; }
+	inline void swap(this_type& r) { std::swap(p_typeStorage, r.p_typeStorage); }
+	inline TypeStorage::ITypeStorage* GetTypeStorage() { return p_typeStorage; }
+	inline const TypeStorage::ITypeStorage* GetTypeStorage()const { return p_typeStorage; }
 	inline bool unique()const { return use_count() == 1; }
-	inline std::uint64_t use_count()const { return p_impl ? p_impl->count() : 0; }
-	inline this_type& operator=(const this_type& arg_r) {
-		impl* tmp = arg_r.p_impl;
-		if (tmp != p_impl) {
-			if (tmp) tmp->inc();
-			release();
-			p_impl = tmp;
-		}
-		return *this;
-	}
-	inline this_type CreateSameType(void* arg_p_src)const {
-		return this_type(p_impl->CreateSameTypeStorage(arg_p_src));
-	}
+	inline std::uint64_t use_count()const { return p_typeStorage ? use : 0; }
+	inline std::uint64_t weak_count()const { return p_typeStorage ? weak: 0; }
 	inline bool ShowGUI(const std::string& arg_label) {
-		return p_impl?p_impl->p_typeStorage->ShowGUI(arg_label):false;
+		return p_typeStorage ?p_typeStorage->ShowGUI(arg_label):false;
 	}
-	inline void _Increase() {
-		p_impl->inc();
+	inline std::int64_t _Increase() {
+		return _InterlockedIncrement64(reinterpret_cast<volatile std::int64_t*>(&use));
 	}
-	inline void _Decrease() {
-		p_impl->dec();
+	inline std::int64_t _Decrease() {
+		return _InterlockedDecrement64(reinterpret_cast<volatile std::int64_t*>(&use));
+	}
+	inline std::int64_t _Increase_weak() {
+		return _InterlockedIncrement64(reinterpret_cast<volatile std::int64_t*>(&weak));
+	}
+	inline std::int64_t _Decrease_weak() {
+		return _InterlockedDecrement64(reinterpret_cast<volatile std::int64_t*>(&weak));
 	}
 	inline bool _Increase_notZero() {
-		return p_impl->inc_nz();
+		return	use ? _Increase() : false;
 	}
 	inline bool _Decrease_notZero() {
-		return p_impl->dec_nz();
+		return	use ? _Decrease() : false;
 	}
 	inline void GetRestoreObject(Value_ptr<IValuePtrRestoreObject>& arg_ref_vlp) const;
-private:
-	struct impl {
-		template<typename S, typename D> explicit impl(S* arg_p, D)
-			:use(1), p_typeStorage(D::template type<S>::name::get(arg_p)) {}
-		template<typename S, typename D> explicit impl(S* arg_p, D* arg_p_typeStorage)
-			:use(1), p_typeStorage(arg_p_typeStorage) {}
-		impl(TypeStorage::ITypeStorage* arg_p_typeStorage):use(1),p_typeStorage(arg_p_typeStorage){}
-		impl(const impl& arg_c) :use(arg_c.use), p_typeStorage(arg_c.p_typeStorage) {}
-		inline std::uint64_t inc() {
-			return	_InterlockedIncrement64(reinterpret_cast<volatile std::int64_t*>(&use));
-		}
-		inline std::uint64_t dec() {
-			return	_InterlockedDecrement64(reinterpret_cast<volatile std::int64_t*>(&use));
-		}
-		inline std::uint64_t inc_nz() {
-			return	use ? inc() : false;
-		}
-		inline std::uint64_t dec_nz() {
-			return	use ? dec() : false;
-		}
 
-		inline std::uint64_t count()const { return use; }
-		~impl() { p_typeStorage->Destroy(); }
-		impl* CreateSameTypeStorage(void* arg_p_src)const {
-			return Allocator::template allocate< impl>(p_typeStorage->CreateSameTypeStorage(arg_p_src));
-		}
-		std::uint64_t use;
-		TypeStorage::ITypeStorage* p_typeStorage;
-	};
-	impl* p_impl;
+private:
+	
+	RefferenceCounter* CreateSameTypeStorage(void* arg_p_src)const {
+		return Alloc::template allocate< RefferenceCounter>(p_typeStorage->CreateSameTypeStorage(arg_p_src));
+	}
+	std::uint64_t use=0, weak=0;
+	TypeStorage::ITypeStorage* p_typeStorage=nullptr;
 };
 
-template<typename Allocator>
-class RefferenceCounter_weak {
-public:
-	using BaseRefferenceCounter = RefferenceCounter<Allocator>;
-	constexpr RefferenceCounter_weak(const RefferenceCounter<Allocator>& arg_refferenceCounter) noexcept :p_impl(arg_refferenceCounter.p_impl) {}
-	constexpr RefferenceCounter_weak()noexcept:p_impl(nullptr){}
-	inline const RefferenceCounter_weak<Allocator>& operator=(const RefferenceCounter<Allocator>& arg_refferenceCounter) {
-		p_impl = arg_refferenceCounter.p_impl;
-		return *this;
-	}
-	inline operator RefferenceCounter<Allocator>()const {
-		return RefferenceCounter<Allocator>(p_impl);
-	}
-	inline bool _Increase_notZero() {
-		return p_impl->inc_nz();
-	}
-	inline bool _Decrease_notZero() {
-		return p_impl->dec_nz();
-	}
-private:
-	RefferenceCounter<Allocator>::template impl* p_impl;
-};
 }
 }
 
-template<typename T, typename RefferenceObject = SmartPtrDetail::RefferenceCounter::RefferenceCounter_weak<ButiMemorySystem::Allocator>>
+template<typename T, typename RefferenceObject = SmartPtrDetail::RefferenceCounter::RefferenceCounter<ButiMemorySystem::Allocator>>
 class Value_weak_ptr {
 	using this_type = Value_weak_ptr<T, RefferenceObject>;
 	using refCounter_type = RefferenceObject;
@@ -401,11 +363,16 @@ public:
 	Value_weak_ptr()noexcept :p_value(nullptr){}
 	Value_weak_ptr(const this_type& arg_other)noexcept {
 		p_value = arg_other.p_value;
-		refferenceCounter = arg_other.refferenceCounter;
+		p_refferenceCounter = arg_other.p_refferenceCounter;
+		Increase();
 	}
 	Value_weak_ptr(const Value_ptr<T>& arg_other)noexcept {
-		p_value = arg_other.p_value;
-		refferenceCounter = arg_other.refferenceCounter;
+		p_value = arg_other.p_value; 
+		p_refferenceCounter = arg_other.p_refferenceCounter;
+		Increase();
+	}
+	~Value_weak_ptr() {
+		Release();
 	}
 	template<typename S>
 	this_type& operator=(const Value_ptr<S>& arg_other) noexcept {
@@ -415,7 +382,8 @@ public:
 		else {
 			p_value = arg_other.p_value;
 		}
-		refferenceCounter = arg_other.refferenceCounter;
+		Release(); p_refferenceCounter = arg_other.p_refferenceCounter;
+		Increase();
 		return *this;
 	}
 	template<typename S>
@@ -426,12 +394,15 @@ public:
 		else {
 			p_value = arg_other.p_value;
 		}
-		refferenceCounter = arg_other.refferenceCounter;
+		Release(); 
+		p_refferenceCounter = arg_other.p_refferenceCounter;
+		Increase();
 		return *this;
 	}
 	this_type& operator=(std::nullptr_t) noexcept {
 		p_value =nullptr;
-		refferenceCounter = refCounter_type();
+		Release();
+		p_refferenceCounter = nullptr;
 		return *this;
 	}
 	bool operator==(const this_type& arg_other)const noexcept {
@@ -440,11 +411,12 @@ public:
 	operator Value_weak_ptr<void> ()const {
 		auto output = Value_weak_ptr<void>();
 		output.p_value=p_value;
-		output.refferenceCounter = refferenceCounter;
+		output.p_refferenceCounter = p_refferenceCounter; 
+		output.Increase();
 		return output;
 	}
 	[[nodiscard]] Value_ptr<T> lock() const noexcept{
-		if (p_value) {
+		if (p_value&& p_refferenceCounter->use_count()) {
 			return Value_ptr<T>(*this);
 		}
 		else {
@@ -452,8 +424,19 @@ public:
 		}
 	}
 private:
-	pointer p_value;
-	refCounter_type refferenceCounter;
+
+	inline void Release() {
+		if (p_refferenceCounter) {
+			p_refferenceCounter->release_weak();
+		}
+	}
+	inline void Increase() {
+		if (p_refferenceCounter) {
+			p_refferenceCounter->_Increase_weak();
+		}
+	}
+	pointer p_value=nullptr;
+	refCounter_type* p_refferenceCounter=nullptr;
 };
 template<typename T, typename RefferenceObject >
 class Value_ptr {
@@ -467,27 +450,38 @@ public:
 	using reference = SmartPtrDetail::TypeStorage::type_to_ref<T>;
 	using const_reference = SmartPtrDetail::TypeStorage::type_to_constRef<T>;
 
-	inline constexpr Value_ptr()noexcept :p_value(nullptr), refferenceCounter() {}
-	inline constexpr Value_ptr(std::nullptr_t)noexcept :p_value(nullptr), refferenceCounter() {}
-	inline Value_ptr(const this_type& arg_s) : p_value(arg_s.p_value), refferenceCounter(arg_s.refferenceCounter) {}
+	inline constexpr Value_ptr()noexcept :p_value(nullptr), p_refferenceCounter(nullptr) {}
+	inline constexpr Value_ptr(std::nullptr_t)noexcept :p_value(nullptr), p_refferenceCounter(nullptr) {}
+	inline Value_ptr(const this_type& arg_s) : p_value(arg_s.p_value){
+		p_refferenceCounter = arg_s.p_refferenceCounter;
+		Increase();
+	}
 	template<typename S, std::enable_if_t<std::is_convertible_v<S*, pointer>, std::int32_t> = 0>
-	inline Value_ptr(const Value_ptr<S, refCounter_type>& arg_s) : p_value(arg_s.p_value), refferenceCounter(arg_s.refferenceCounter) {}
+	inline Value_ptr(const Value_ptr<S, refCounter_type>& arg_s) : p_value(arg_s.p_value) {
+		p_refferenceCounter = arg_s.p_refferenceCounter;
+		Increase();
+	}
 	template<typename S>
 	inline explicit Value_ptr(const S& arg_v) :Value_ptr(refCounter_type::Alloc::allocate(arg_v)){	}
 	template <class U>
 	Value_ptr(const Value_ptr<U>& arg_other, element_type* arg_p) noexcept {
-		refferenceCounter = arg_other.refferenceCounter;
+		p_refferenceCounter = arg_other.p_refferenceCounter;
+		Increase();
 		p_value = arg_p;
 	}
-	inline Value_ptr(T* arg_p, RefferenceObject arg_refObj) :p_value(arg_p), refferenceCounter(arg_refObj) {}
+	inline Value_ptr(T* arg_p, RefferenceObject* arg_refObj) :p_value(arg_p), p_refferenceCounter(arg_refObj) { Increase(); }
 	template<typename S>
-	inline explicit Value_ptr(S* arg_p) :p_value(arg_p), refferenceCounter(arg_p, SmartPtrDetail::TypeStorage::TypeStorageSpecifier()) {
+	inline explicit Value_ptr(S* arg_p) :p_value(arg_p) {
+		p_refferenceCounter = ButiMemorySystem::Allocator::allocate<RefferenceObject>(arg_p, SmartPtrDetail::TypeStorage::TypeStorageSpecifier());
 		_SetWeakPtrEnableValue(arg_p);
 	}
 	template<typename S>
-	inline explicit Value_ptr(S* arg_p, [[maybe_unused]] const SmartPtrDetail::MemberPtrNotify) :p_value(arg_p), refferenceCounter(arg_p, SmartPtrDetail::TypeStorage::MemberTypeStorageSpecifier()) {}
+	inline explicit Value_ptr(S* arg_p, [[maybe_unused]] const SmartPtrDetail::MemberPtrNotify) :p_value(arg_p) {
+		p_refferenceCounter = ButiMemorySystem::Allocator::allocate<RefferenceObject>(arg_p, SmartPtrDetail::TypeStorage::MemberTypeStorageSpecifier());
+	}
 	template<typename S, typename D>
-	inline explicit Value_ptr(S* arg_p, D arg_d) :p_value(arg_p), refferenceCounter(arg_p, arg_d) {
+	inline explicit Value_ptr(S* arg_p, D arg_d) :p_value(arg_p){
+		p_refferenceCounter = ButiMemorySystem::Allocator::allocate<RefferenceObject>(arg_p, arg_d);
 		_SetWeakPtrEnableValue(arg_p);
 	}
 	template<typename S>
@@ -495,9 +489,11 @@ public:
 		ConstructFromWeak(arg_vwp_other);
 	}
 
-	~Value_ptr() {}
+	~Value_ptr() {
+		Release();
+	}
 	inline this_type CreateSameTypeValuePtr(void* arg_p_src) const{
-		return this_type(arg_p_src, refferenceCounter.CreateSameType(arg_p_src));
+		return this_type(arg_p_src, p_refferenceCounter->CreateSameType(arg_p_src));
 	}
 
 	inline void reset() { this_type().swap(*this); }
@@ -506,19 +502,34 @@ public:
 	template<class S, class D>
 	inline void reset(S* arg_p, D arg_d) { this_type(arg_p, arg_d).swap(*this); }
 	inline void swap(this_type& arg_other) {
+		if (!arg_other&&!(*this)) {
+			return;
+		}
 		std::swap(p_value, arg_other.p_value);
-		refferenceCounter.swap(arg_other.refferenceCounter);
+		if (p_refferenceCounter&& arg_other.p_refferenceCounter) {
+			p_refferenceCounter->swap(*arg_other.p_refferenceCounter);
+		}
 	}
 
 	inline this_type& operator=(const this_type& arg_s) {
 		p_value = arg_s.p_value;
-		refferenceCounter = arg_s.refferenceCounter;
+		Release();
+		p_refferenceCounter = arg_s.p_refferenceCounter;
+		Increase();
 		return *this;
 	}
-	template<class S>
+	inline this_type& operator=(const std::nullptr_t) {
+		p_value = nullptr;
+		Release();
+		p_refferenceCounter = nullptr;
+		return *this;
+	}
+	template<class S, std::enable_if_t<std::is_convertible_v<S*, pointer>, std::int32_t> = 0>
 	inline this_type& operator=(const Value_ptr<S, refCounter_type>& arg_s) {
 		p_value = arg_s.p_value;
-		refferenceCounter = arg_s.refferenceCounter;
+		Release();
+		p_refferenceCounter = arg_s.p_refferenceCounter;
+		Increase();
 		return *this;
 	}
 	template<class S>
@@ -539,10 +550,10 @@ public:
 	}
 
 	inline std::string ToString() const{
-		return refferenceCounter.GetTypeStorage()->ToString();
+		return p_refferenceCounter->GetTypeStorage()->ToString();
 	}
 	Value_ptr<T> Clone()const {
-		auto typeStorage = refferenceCounter.GetTypeStorage()->Clone();
+		auto typeStorage = p_refferenceCounter->GetTypeStorage()->Clone();
 		return Value_ptr<T>(reinterpret_cast<pointer>(typeStorage->ptr()), typeStorage);
 	}
 	/// <summary>
@@ -550,16 +561,16 @@ public:
 	/// </summary>
 	/// <param name="arg_src">書き込み元のポインタ、型が同一と信頼</param>
 	inline void Write(const void* arg_src) {
-		refferenceCounter.Write(arg_src);
+		p_refferenceCounter->Write(arg_src);
 	}
 	template<typename CastType>
 	inline Value_ptr<CastType> StaticCast()const {
-		auto typeStorage = refferenceCounter.GetTypeStorage()->StaticCast<T, CastType, refCounter_type::Alloc>();
+		auto typeStorage = p_refferenceCounter->GetTypeStorage()->StaticCast<T, CastType, refCounter_type::Alloc>();
 		return Value_ptr<CastType>(reinterpret_cast<CastType*>(typeStorage->ptr()), typeStorage);
 	}
 	template<typename OwnType, typename CastType>
 	inline Value_ptr<CastType> StaticCast()const {
-		auto typeStorage = refferenceCounter.GetTypeStorage()->StaticCast<OwnType, CastType, refCounter_type::Alloc>();
+		auto typeStorage = p_refferenceCounter->GetTypeStorage()->StaticCast<OwnType, CastType, refCounter_type::Alloc>();
 		return Value_ptr<CastType>(reinterpret_cast<CastType*>(typeStorage->ptr()), typeStorage);
 	}
 
@@ -574,8 +585,8 @@ public:
 	template<typename RetType>
 	inline const RetType* get()const { return reinterpret_cast<RetType*>(p_value); }
 
-	inline bool unique()const { return refferenceCounter.unique(); }
-	inline std::uint64_t use_count()const { return refferenceCounter.use_count(); }
+	inline bool unique()const { return p_refferenceCounter->unique(); }
+	inline std::uint64_t use_count()const { return p_refferenceCounter->use_count(); }
 
 	inline operator bool()const { return !!p_value; }
 	inline bool operator==(std::nullptr_t)const {
@@ -587,22 +598,22 @@ public:
 	inline operator std::int32_t() const = delete;
 	inline bool operator!()const { return !p_value; }
 	inline bool ShowGUI(const std::string& arg_label) {
-		return refferenceCounter.ShowGUI(arg_label);
+		return p_refferenceCounter->ShowGUI(arg_label);
 	}
 
 	inline Value_ptr<IValuePtrRestoreObject, refCounter_type> GetRestoreObject() const {
 		Value_ptr<IValuePtrRestoreObject, refCounter_type> output;
-		refferenceCounter.GetRestoreObject(output);
+		p_refferenceCounter->GetRestoreObject(output);
 		return output;
 	}
 
 private:
 	template<typename S>
 	inline bool ConstructFromWeak(const Value_weak_ptr<S>& arg_vwp_other) noexcept {
-		if (arg_vwp_other.p_value) {
+		if (arg_vwp_other.p_value&&arg_vwp_other.p_refferenceCounter->use_count()) {
 			p_value = arg_vwp_other.p_value;
-			refferenceCounter = arg_vwp_other.refferenceCounter;
-			refferenceCounter._Increase_notZero();
+			p_refferenceCounter = arg_vwp_other.p_refferenceCounter;
+			p_refferenceCounter->_Increase_notZero();
 			return true;
 		}
 
@@ -614,10 +625,23 @@ private:
 			arg_p_this->weak_ptr = *this;
 		}
 	}
+
+	inline void Release() {
+		if (p_refferenceCounter) {
+			if (p_refferenceCounter->release()) {
+				p_refferenceCounter = nullptr;
+			}
+		}
+	}
+	inline void Increase() {
+		if (p_refferenceCounter) {
+			p_refferenceCounter -> _Increase();
+		}
+	}
 	template<typename S, typename R> friend class Value_ptr;
 	template<typename S, typename R> friend class Value_weak_ptr;
-	pointer p_value;
-	refCounter_type refferenceCounter;
+	pointer p_value=nullptr;
+	refCounter_type* p_refferenceCounter=nullptr;
 };
 
 
@@ -629,8 +653,10 @@ template<class T, class U, class R>
 inline bool operator!=(const Value_ptr<T, R>& arg_lhs, const Value_ptr<U, R>& arg_rhs) {
 	return arg_lhs.get() != arg_rhs.get();
 }
+class IEnable_value_from_this{};
+
 template <typename T>
-class enable_value_from_this {
+class enable_value_from_this:public IEnable_value_from_this {
 public:
 
 	using _Evft_type = enable_value_from_this;
@@ -662,7 +688,7 @@ protected:
 
 	template<typename S, typename R> friend class Value_ptr;
 private:
-	Value_weak_ptr<T> weak_ptr;
+	Value_weak_ptr<T> weak_ptr = Value_weak_ptr<T>();
 };
 
 template<typename T, typename... Args>
@@ -693,7 +719,7 @@ private:
 };
 template <typename Allocator>
 inline void SmartPtrDetail::RefferenceCounter::RefferenceCounter<Allocator>::GetRestoreObject(Value_ptr<IValuePtrRestoreObject>& arg_ref_vlp)const {
-	p_impl->p_typeStorage->GetRestoreObject(arg_ref_vlp);
+	p_typeStorage->GetRestoreObject(arg_ref_vlp);
 }
 template<typename T,typename Allocator>
 inline void SmartPtrDetail::TypeStorage::TypeStorage<T,Allocator>::GetRestoreObject(Value_ptr<IValuePtrRestoreObject>& arg_ref_vlp)const {
