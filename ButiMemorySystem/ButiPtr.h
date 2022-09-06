@@ -288,18 +288,19 @@ public:
 	explicit RefferenceCounter(S* arg_p, D* arg_p_d):use(1), weak(0), p_typeStorage(arg_p_d) {}
 	~RefferenceCounter() {  }
 	inline bool release() {
-		if (p_typeStorage && !_Decrease_notZero()) {
-			p_typeStorage->Destroy();
+		if (!_Decrease_notZero()&& p_typeStorage) {
+			auto storage = p_typeStorage;
 			p_typeStorage = nullptr;
 			if (!weak) {
 				Alloc::deallocate(this);
 			}
+			storage->Destroy();			
 			return true;
 		}
 		return false;
 	}
 	inline void release_weak() {
-		if (!_Decrease_weak()&&!use) {
+		if (!_Decrease_weak_notZero()&&!use) {
 			Alloc::deallocate(this);
 		}
 	}
@@ -332,6 +333,12 @@ public:
 	}
 	inline bool _Decrease_notZero() {
 		return	use ? _Decrease() : false;
+	}
+	inline bool _Increase_weak_notZero() {
+		return	weak ? _Increase_weak() : false;
+	}
+	inline bool _Decrease_weak_notZero() {
+		return	weak ? _Decrease_weak() : false;
 	}
 	inline void GetRestoreObject(Value_ptr<IValuePtrRestoreObject>& arg_ref_vlp) const;
 
@@ -371,8 +378,26 @@ public:
 		p_refferenceCounter = arg_other.p_refferenceCounter;
 		Increase();
 	}
+
+	template<typename S, std::enable_if_t<std::is_convertible_v<S*, pointer>, std::int32_t> = 0>
+	inline Value_weak_ptr(const Value_ptr<S, refCounter_type>& arg_s) : p_value(arg_s.p_value) {
+		p_refferenceCounter = arg_s.p_refferenceCounter;
+		Increase();
+	}
 	~Value_weak_ptr() {
 		Release();
+	}
+	this_type& operator=(const this_type& arg_other) noexcept {
+		p_value = arg_other.p_value;
+		Release(); p_refferenceCounter = arg_other.p_refferenceCounter;
+		Increase();
+		return *this;
+	}
+	this_type& operator=(const Value_ptr<T>& arg_other) noexcept {
+		p_value = arg_other.p_value;
+		Release(); p_refferenceCounter = arg_other.p_refferenceCounter;
+		Increase();
+		return *this;
 	}
 	template<typename S>
 	this_type& operator=(const Value_ptr<S>& arg_other) noexcept {
@@ -484,8 +509,12 @@ public:
 		p_refferenceCounter = ButiMemorySystem::Allocator::allocate<RefferenceObject>(arg_p, arg_d);
 		_SetWeakPtrEnableValue(arg_p);
 	}
+
+	inline constexpr Value_ptr(const Value_weak_ptr<T>& arg_vwp_other)noexcept {
+		ConstructFromWeak(arg_vwp_other);
+	}
 	template<typename S>
-	inline constexpr Value_ptr(const Value_weak_ptr<S> arg_vwp_other)noexcept {
+	inline constexpr Value_ptr(const Value_weak_ptr<S>& arg_vwp_other)noexcept {
 		ConstructFromWeak(arg_vwp_other);
 	}
 
@@ -608,12 +637,24 @@ public:
 	}
 
 private:
+	inline bool ConstructFromWeak(const Value_weak_ptr<T>& arg_vwp_other) noexcept {
+		if (arg_vwp_other.p_value && arg_vwp_other.p_refferenceCounter->use_count()) {
+			p_value = arg_vwp_other.p_value;
+			Release();
+			p_refferenceCounter = arg_vwp_other.p_refferenceCounter;
+			p_refferenceCounter->_Increase();
+			return true;
+		}
+
+		return false;
+	}
 	template<typename S>
 	inline bool ConstructFromWeak(const Value_weak_ptr<S>& arg_vwp_other) noexcept {
-		if (arg_vwp_other.p_value&&arg_vwp_other.p_refferenceCounter->use_count()) {
+		if (arg_vwp_other.p_value && arg_vwp_other.p_refferenceCounter->use_count()) {
 			p_value = arg_vwp_other.p_value;
+			Release();
 			p_refferenceCounter = arg_vwp_other.p_refferenceCounter;
-			p_refferenceCounter->_Increase_notZero();
+			p_refferenceCounter->_Increase();
 			return true;
 		}
 
@@ -684,7 +725,8 @@ protected:
 	/// <returns>weak_ptr‚Ö‚ÌƒAƒhƒŒƒX</returns>
 	const Value_weak_ptr<T>* weakAddress()const noexcept { return &weak_ptr; }
 	Value_weak_ptr<T>* weakAddress()noexcept{ return &weak_ptr; }
-	~enable_value_from_this() = default;
+
+	virtual ~enable_value_from_this() = default;
 
 	template<typename S, typename R> friend class Value_ptr;
 private:
