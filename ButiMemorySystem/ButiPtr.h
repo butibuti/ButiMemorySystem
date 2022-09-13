@@ -15,7 +15,9 @@ inline std::string to_string(const ButiScript::Type_hasMember<T>& arg_v);
 #endif // __vm_value_h__
 
 namespace ButiEngine {
-
+namespace GUI {
+bool Input(const std::string&, nullptr_t);
+}
 class IEnable_value_from_this;
 
 template <class T, class = void>
@@ -108,12 +110,10 @@ struct FunctionCheck_std_to_string {
 	auto operator()(T&& arg_check)->decltype(std::to_string(arg_check));
 };
 
-#ifdef BUTIGUI_H
 struct FunctionCheck_GUI_Input {
 	template <typename T>
 	auto operator()(T&& arg_check) -> decltype(GUI::Input("", arg_check));
 };
-#endif
 template<typename T>
 inline T& Through(T& arg_ref_v) { return arg_ref_v; }
 
@@ -144,7 +144,6 @@ public:
 protected:
 	template<typename T>
 	inline bool ShowGUI_(const std::string& arg_label, T& arg_value) {
-#ifdef BUTIGUI_H
 		if constexpr (std::is_invocable_v<FunctionCheck_GUI_Input, T>)
 		{
 			return GUI::Input(arg_label, arg_value);
@@ -158,9 +157,8 @@ protected:
 			return arg_value.ShowGUI(arg_label);
 		}
 		else {
-			GUI::Text(arg_label + u8":‘Î‰ž‚µ‚Ä‚¢‚È‚¢Œ^‚Å‚·");
+			//GUI::Text(arg_label + u8":‘Î‰ž‚µ‚Ä‚¢‚È‚¢Œ^‚Å‚·");
 		}
-#endif // BUTIGUI_H
 		return false;
 	}
 	template<typename T>
