@@ -157,7 +157,7 @@ protected:
 			return arg_value.ShowGUI(arg_label);
 		}
 		else {
-			//GUI::Text(arg_label + u8":‘Î‰ž‚µ‚Ä‚¢‚È‚¢Œ^‚Å‚·");
+			//GUI::Text(arg_label + ":‘Î‰ž‚µ‚Ä‚¢‚È‚¢Œ^‚Å‚·");
 		}
 		return false;
 	}
