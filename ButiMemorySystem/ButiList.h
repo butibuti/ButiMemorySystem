@@ -101,7 +101,7 @@ public:
 
 	static pointer_type allocate(size_type arg_count, const_pointer_type hint = nullptr)
 	{
-		return reinterpret_cast<pointer_type>(ButiMemorySystem::Allocator::allocate(arg_count * sizeof(T)));
+		return reinterpret_cast<pointer_type>(ButiMemorySystem::Allocator::allocate(arg_count * static_cast<size_type>( sizeof(T))));
 	}
 
 	static void deallocate(pointer_type arg_ptr, size_type)
@@ -221,7 +221,7 @@ public:
 		return !(*this > arg_other);
 	}
 	inline difference_type operator-(const this_type& arg_other)const noexcept {
-		return (p_v - arg_other.p_v);
+		return static_cast<difference_type> (p_v - arg_other.p_v);
 	}
 	inline pointer_type Ptr()const noexcept { return p_v; }
 	inline void _Seek_to(const_pointer_type arg_p_v) noexcept {
@@ -783,30 +783,30 @@ public:
 		CheckEmpty();
 		return *(end() - 1);
 	}
-	reference_type At(const std::int32_t arg_index)
+	reference_type At(const std::uint32_t arg_index)
 	{
 		CheckOutOfRange(arg_index);
 		return reinterpret_cast<pointer_type>(p_data)[arg_index];
 	}
 
-	const_reference_type At(const std::int32_t arg_index) const
+	const_reference_type At(const std::uint32_t arg_index) const
 	{
 		CheckOutOfRange(arg_index);
 		return reinterpret_cast<pointer_type>(p_data)[arg_index];
 	}
-	reference_type at(const std::int32_t arg_index)
-	{
-		CheckOutOfRange(arg_index);
-		return reinterpret_cast<pointer_type>(p_data)[arg_index];
-	}
-
-	const_reference_type at(const std::int32_t arg_index) const
+	reference_type at(const std::uint32_t arg_index)
 	{
 		CheckOutOfRange(arg_index);
 		return reinterpret_cast<pointer_type>(p_data)[arg_index];
 	}
 
-	inline bool IsOutOfRange(const std::int32_t arg_index) const noexcept
+	const_reference_type at(const std::uint32_t arg_index) const
+	{
+		CheckOutOfRange(arg_index);
+		return reinterpret_cast<pointer_type>(p_data)[arg_index];
+	}
+
+	inline bool IsOutOfRange(const std::uint32_t arg_index) const noexcept
 	{
 		return (arg_index < 0 || GetSize() <= arg_index);
 	}
@@ -886,6 +886,9 @@ public:
 		return arg_begin;
 	}
 	inline const T* data()const {
+		return p_data;
+	}
+	inline T* data(){
 		return p_data;
 	}
 

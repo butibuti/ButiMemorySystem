@@ -604,9 +604,15 @@ public:
 	inline reference operator*() { if constexpr (std::is_same_v<element_type, void>) {} else { return *get(); } }
 	inline const_reference operator*()const { if constexpr (std::is_same_v<element_type, void>) {} else { return *get(); } }
 	//inline pointer operator->() { return get(); }
-	inline pointer operator->()const { return get(); }
+	inline pointer operator->()const {
+#ifdef _EDITORBUILD
+		if (!p_value) {
+			throw std::exception();
+		}
+#endif // _EDITORBUILD
+		return get(); }
 
-	inline pointer get()const { return p_value; }
+	inline pointer get()const { return 	p_value; }
 	template<typename RetType>
 	inline RetType* get() { return reinterpret_cast<RetType*>(p_value); }
 	template<typename RetType>
@@ -752,7 +758,7 @@ public:
 	template<class Archive>
 	void serialize(Archive& archive)
 	{
-		archive(data);
+		ARCHIVE_BUTI(data);
 	}
 private:
 	T data;
