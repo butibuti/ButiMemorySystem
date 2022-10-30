@@ -5,14 +5,6 @@
 #include<type_traits>
 #include <cassert>
 #include"MemoryAllocator.h"
-#ifdef __vm_value_h__
-
-namespace std {
-template<typename T>
-inline std::string to_string(const ButiScript::Type_hasMember<T>& arg_v);
-
-}
-#endif // __vm_value_h__
 
 namespace ButiEngine {
 namespace GUI {

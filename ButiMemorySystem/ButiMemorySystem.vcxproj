@@ -139,7 +139,7 @@
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(SolutionDir)Libs\dll\$(Configuration)" "$(SolutionDir)output\$(Configuration)"</Command>
+      <Command>xcopy /y /d "$(SolutionDir)Libs\dll\$(Configuration)\$(ProjectName).dll" "$(SolutionDir)output\$(Configuration)\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -164,7 +164,7 @@
       <EnableUAC>false</EnableUAC>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(SolutionDir)Libs\dll\$(Configuration)" "$(SolutionDir)output\$(Configuration)"</Command>
+      <Command>xcopy /y /d "$(SolutionDir)Libs\dll\$(Configuration)\$(ProjectName).dll" "$(SolutionDir)output\$(Configuration)\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
