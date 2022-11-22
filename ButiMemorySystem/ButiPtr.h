@@ -5,7 +5,7 @@
 #include<type_traits>
 #include <cassert>
 #include"MemoryAllocator.h"
-
+#include"ButiUtil/ButiUtil/Exception.h"
 namespace ButiEngine {
 namespace GUI {
 bool Input(const std::string&, nullptr_t);
@@ -597,11 +597,9 @@ public:
 	inline const_reference operator*()const { if constexpr (std::is_same_v<element_type, void>) {} else { return *get(); } }
 	//inline pointer operator->() { return get(); }
 	inline pointer operator->()const {
-#ifdef _EDITORBUILD
 		if (!p_value) {
-			throw std::exception();
+			THROWBUTIEXCEPTION(L"‹ó‚ÌValue_ptr‚ðŽg—p‚µ‚Ä‚¢‚Ü‚·");
 		}
-#endif // _EDITORBUILD
 		return get(); }
 
 	inline pointer get()const { return 	p_value; }
