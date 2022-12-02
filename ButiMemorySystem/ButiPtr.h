@@ -598,7 +598,7 @@ public:
 	//inline pointer operator->() { return get(); }
 	inline pointer operator->()const {
 		if (!p_value) {
-			THROWBUTIEXCEPTION(L"空のValue_ptrを使用しています");
+			THROWBUTIEXCEPTION("空のValue_ptrを使用しています");
 		}
 		return get(); }
 

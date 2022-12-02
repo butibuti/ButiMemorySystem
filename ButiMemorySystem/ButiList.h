@@ -387,6 +387,12 @@ public:
 	}
 	inline List(std::initializer_list<value_type> arg_initializer) :List(arg_initializer.begin(), arg_initializer.end()) {}
 
+	inline List(const void* arg_data, const std::uint64_t arg_size) {
+		Reserve(arg_size);
+		currentDataSize = arg_size;
+		memcpy_s(p_data,arg_size,arg_data,arg_size);
+	}
+
 	template <typename Iterator_T>
 	inline List(Iterator_T arg_begin, Iterator_T arg_end) {
 		if constexpr (ButiTypeDetail::has_subtract_v<Iterator_T>) {
@@ -915,7 +921,7 @@ private:
 	{
 		if (IsOutOfRange(arg_index)) {
 #ifdef BUTIEXCEPTION_DEFINED
-			throw ButiEngine::ButiException(L"Listの範囲外へのアクセスです");
+			throw ButiEngine::ButiException("Listの範囲外へのアクセスです");
 #else
 			throw std::exception();
 #endif // BUTIEXCEPTION_DEFINED
@@ -926,7 +932,7 @@ private:
 	inline void CheckEmpty()const {
 		if (IsEmpty()) {
 #ifdef BUTIEXCEPTION_DEFINED
-			throw ButiEngine::ButiException(L"Listが空です");
+			throw ButiEngine::ButiException("Listが空です");
 #else
 			throw std::exception();
 #endif // BUTIEXCEPTION_DEFINED
