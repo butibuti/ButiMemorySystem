@@ -12,10 +12,12 @@ namespace ButiMemorySystem {
 extern class Allocator {
 public:
 	BUTIMEMORYSYSTEM_API static void* allocate(std::uint32_t arg_size);
-	BUTIMEMORYSYSTEM_API static void* allocate_large(std::uint64_t arg_size);
-	BUTIMEMORYSYSTEM_API static void* allocate_customAlign(std::uint64_t arg_size, std::int32_t alignment);
+	BUTIMEMORYSYSTEM_API static void* allocateLarge(std::uint64_t arg_size);
+	BUTIMEMORYSYSTEM_API static void* allocateArray(std::uint32_t arg_size);
+	BUTIMEMORYSYSTEM_API static void* allocateCustomAlign(std::uint64_t arg_size, std::int32_t alignment);
 	BUTIMEMORYSYSTEM_API static void deallocate(void* arg_ptr);
-	BUTIMEMORYSYSTEM_API static void deallocate_bt(void* arg_ptr);
+	BUTIMEMORYSYSTEM_API static void deallocateBt(void* arg_ptr);
+	BUTIMEMORYSYSTEM_API static void deallocateArray(void* arg_ptr);
 
 	template <typename T,typename... Args>
 	static inline constexpr T* allocate(Args&&... args) {
@@ -32,6 +34,16 @@ public:
 	static inline constexpr void deallocate(const T* arg_ptr) {
 		arg_ptr->~T();
 		deallocate(const_cast<void*>(reinterpret_cast<const void*>(arg_ptr)));
+	}
+	template<typename T>
+	static inline constexpr void deallocateArray(T* arg_ptr) {
+		arg_ptr->~T();
+		deallocateArray(reinterpret_cast<void*>(arg_ptr));
+	}
+	template<typename T>
+	static inline constexpr void deallocateArray(const T* arg_ptr) {
+		arg_ptr->~T();
+		deallocateArray(const_cast<void*>(reinterpret_cast<const void*>(arg_ptr)));
 	}
 private:
 

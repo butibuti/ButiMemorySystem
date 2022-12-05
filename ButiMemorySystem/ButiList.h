@@ -101,16 +101,16 @@ public:
 
 	static pointer_type allocate(size_type arg_count, const_pointer_type hint = nullptr)
 	{
-		return reinterpret_cast<pointer_type>(ButiMemorySystem::Allocator::allocate(arg_count * static_cast<size_type>( sizeof(T))));
+		return reinterpret_cast<pointer_type>(ButiMemorySystem::Allocator::allocateArray(arg_count * static_cast<size_type>( sizeof(T))));
 	}
 
 	static void deallocate(pointer_type arg_ptr, size_type)
 	{
-		ButiMemorySystem::Allocator::deallocate(arg_ptr);
+		ButiMemorySystem::Allocator::deallocateArray(arg_ptr);
 	}
 	static void deallocate(void* arg_ptr, size_type)
 	{
-		ButiMemorySystem::Allocator::deallocate(arg_ptr);
+		ButiMemorySystem::Allocator::deallocateArray(arg_ptr);
 	}
 };
 
@@ -387,10 +387,10 @@ public:
 	}
 	inline List(std::initializer_list<value_type> arg_initializer) :List(arg_initializer.begin(), arg_initializer.end()) {}
 
-	inline List(const void* arg_data, const std::uint64_t arg_size) {
-		Reserve(arg_size);
-		currentDataSize = arg_size;
-		memcpy_s(p_data,arg_size,arg_data,arg_size);
+	inline List(const void* arg_data, const std::uint64_t arg_dataSize) {
+		Reserve(arg_dataSize/sizeof(T));
+		currentDataSize = arg_dataSize / sizeof(T);
+		memcpy_s(p_data, arg_dataSize,arg_data, arg_dataSize);
 	}
 
 	template <typename Iterator_T>
@@ -719,6 +719,22 @@ public:
 		else {
 			assert(0 && "コピーコンストラクタの存在しない型のResizeは不可能です");
 		}
+	}
+	inline void Alloc(const std::int32_t arg_size,std::int8_t arg_v=0)
+	{
+		if (arg_size <= 0 || arg_size == currentDataSize) { return; }
+		if (arg_size > currentDataSize) {
+			Reserve(arg_size);
+			memset(end().Ptr(), arg_v, sizeof(T) * arg_size);
+		}
+		else {
+			for (auto itr = (begin() + arg_size), endItr = end(); itr < endItr; itr++) {
+				if constexpr (!std::is_trivially_destructible_v<T>) {
+					itr->~value_type();
+				}
+			}
+		}
+		currentDataSize = arg_size;
 	}
 
 	bool Contains(const value_type& arg_item) const
