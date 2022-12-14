@@ -357,7 +357,8 @@ class Value_weak_ptr {
 	template<typename S, typename R> friend class Value_weak_ptr;
 
 public:
-	Value_weak_ptr()noexcept :p_value(nullptr){}
+	Value_weak_ptr()noexcept :p_value(nullptr) {}
+	Value_weak_ptr(nullptr_t)noexcept :p_value(nullptr) {}
 	Value_weak_ptr(const this_type& arg_other)noexcept {
 		p_value = arg_other.p_value;
 		p_refferenceCounter = arg_other.p_refferenceCounter;
@@ -422,6 +423,9 @@ public:
 	}
 	bool operator==(const this_type& arg_other)const noexcept {
 		return p_value == arg_other.p_value;
+	}
+	bool operator==(std::nullptr_t)const noexcept {
+		return p_value && p_refferenceCounter->use_count();
 	}
 	operator Value_weak_ptr<void> ()const {
 		auto output = Value_weak_ptr<void>();

@@ -452,6 +452,13 @@ public:
 		currentDataSize++;
 	}
 
+	void Add_noDuplicate(const_reference_type arg_item)
+	{
+		Reserve(currentDataSize + 1);
+		if (Contains(arg_item)) { return; }
+		copy_construct(&reinterpret_cast<pointer_type>(p_data)[currentDataSize], arg_item);
+		currentDataSize++;
+	}
 
 	void Add(const this_type& arg_items)
 	{
