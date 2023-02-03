@@ -537,9 +537,18 @@ public:
 		}
 		for (iterator_type itr = end() , endItr =arg_pos ; itr > endItr; itr--) {
 			copy_construct(itr.Ptr(), *(itr - 1));
+			if constexpr (!std::is_trivially_destructible_v<T>) {
+				if(arg_pos!= (itr - 1))
+				(itr - 1)->~value_type();
+			}
 		}
-		*arg_pos = arg_item;
-		currentDataSize += 1;
+		if constexpr (!std::is_trivially_destructible_v<T>) {
+			if (arg_pos - begin() < currentDataSize) {
+				(arg_pos)->~value_type();
+			}
+		}
+		copy_construct(arg_pos.Ptr(), arg_item);
+		currentDataSize ++;
 	}
 
 	inline void Insert(const_iterator_type arg_pos, const_iterator_type arg_begin, const_iterator_type arg_end) {
@@ -754,6 +763,12 @@ public:
 	bool Contains(F arg_function) const
 	{
 		return std::find_if(begin(), end(), arg_function) != end();
+	}
+
+	std::int32_t GetIndex(const_iterator_type arg_itr)const {
+		if (arg_itr >= end() || arg_itr < begin()) { return -1; }
+
+		return arg_itr - begin();
 	}
 
 	std::int32_t IndexOf(const value_type& arg_item, std::int32_t arg_startIndex = 0) const
